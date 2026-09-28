@@ -139,10 +139,10 @@ To disable autostart later, delete the file.
 
 ## Platform notes
 
-- **Tested on:** Ubuntu (22.04+)
+- **Tested on:** Ubuntu (22.04+), macOS (26.7)
 - **Wayland:** On Ubuntu sessions running Wayland, window dragging and always-on-top behavior are unreliable due to Wayland's compositor restrictions. The app automatically detects this and falls back to the X11 (XCB) backend. You can check which session you're running with:
 
 ```bash
   echo $XDG_SESSION_TYPE
 ```
-- Not yet tested on Windows or macOS. Contributions and reports for other platforms are welcome.
+- Not yet tested on Windows. Contributions and reports for other platforms are welcome.
