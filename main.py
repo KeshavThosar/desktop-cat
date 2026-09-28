@@ -6,7 +6,7 @@ if sys.platform.startswith("linux") and os.environ.get("XDG_SESSION_TYPE") == "w
 
 from pathlib import Path
 from PyQt6.QtCore import Qt, QTimer, QPoint
-from PyQt6.QtGui import QPixmap, QPainter, QColor, QKeyEvent, QMouseEvent, QCloseEvent
+from PyQt6.QtGui import QPixmap, QPainter, QKeyEvent, QMouseEvent, QCloseEvent
 from PyQt6.QtWidgets import QApplication, QWidget
 
 SCREEN_SIZE = (180, 180)
@@ -37,7 +37,12 @@ class TransparentPetWindow(QWidget):
 
         # Load and scale sprite sheet
         sprite_dir = Path(__file__).parent.resolve()
-        original_sheet = QPixmap(str(sprite_dir / "cat.png"))
+        sheet_path = sprite_dir / "cat.png"
+        original_sheet = QPixmap(str(sheet_path))
+
+        # A failed load would otherwise result in a silently blank window
+        if original_sheet.isNull():
+            raise FileNotFoundError(f"Could not load sprite sheet at {sheet_path}")
 
         scaled_width = original_sheet.width() * SPRITE_SCALE
         scaled_height = original_sheet.height() * SPRITE_SCALE
@@ -62,28 +67,34 @@ class TransparentPetWindow(QWidget):
         # Dragging state
         self.drag_position = QPoint()
 
-        # Configure transparent window flags
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.WindowStaysOnTopHint
-            | Qt.WindowType.SubWindow
-        )
+        # Configure transparent window flags (platform-specific)
+        flags = Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
+
+        if sys.platform == "darwin":
+            # Tool windows float above normal windows on macOS
+            flags |= Qt.WindowType.Tool
+        else:
+            flags |= Qt.WindowType.SubWindow
+
+        self.setWindowFlags(flags)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+
+        if sys.platform == "darwin":
+            # By default Qt hides Tool windows when the app is not active
+            self.setAttribute(Qt.WidgetAttribute.WA_MacAlwaysShowToolWindow, True)
+
         self.resize(*SCREEN_SIZE)
 
         # Position window at bottom-right of the screen
         primary_screen = QApplication.primaryScreen()
-        
-        if not primary_screen:
-            return
-        
-        screen_geometry = primary_screen.availableGeometry()
-        margin = 20  # pixels of padding from the screen edges
-        x = screen_geometry.right() - SCREEN_SIZE[0] - margin
-        y = screen_geometry.bottom() - SCREEN_SIZE[1] - margin
-        self.move(x, y)
+        if primary_screen:
+            screen_geometry = primary_screen.availableGeometry()
+            margin = 20  # pixels of padding from the screen edges
+            x = screen_geometry.right() - SCREEN_SIZE[0] - margin
+            y = screen_geometry.bottom() - SCREEN_SIZE[1] - margin
+            self.move(x, y)
 
-        # Timer to replace Pygame clock (6 FPS ≈ 166ms per frame)
+        # Animation timer (6 FPS ≈ 166ms per frame); always started
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.next_frame)
         self.timer.start(166)
@@ -101,10 +112,12 @@ class TransparentPetWindow(QWidget):
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
 
-        # Clear background to transparent
-        painter.fillRect(self.rect(), QColor(0, 0, 0, 0))
+        # Clear background to fully transparent (Clear mode actually wipes pixels)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Clear)
+        painter.fillRect(self.rect(), Qt.GlobalColor.transparent)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
 
         current_anim = self.animations[self.anim_index]
         frame = animation_frames[current_anim][self.frame_index]
